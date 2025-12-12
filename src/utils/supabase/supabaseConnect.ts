@@ -3,6 +3,7 @@ import { characterNote } from "../general/types";
 import { v4 } from "uuid";
 import React from "react";
 import { appLoadExtension } from "../general/constants";
+import { copyToClipboard } from "../electron/electronUtils";
 
 const supabaseUrl = "https://buakfixqycjbbjeljnqn.supabase.co";
 const supabaseKey = process.env.REACT_APP_SUPABASE_KEY;
@@ -50,7 +51,7 @@ export const shareScript = async ({
   console.log("ID: ", scriptUUID);
   const linkUrl = appLoadExtension + scriptUUID;
   // prompt the user, and put link in clipboard
-  navigator.clipboard.writeText(linkUrl);
+  await copyToClipboard(linkUrl);
   setScriptShareLink(linkUrl);
   return;
 };

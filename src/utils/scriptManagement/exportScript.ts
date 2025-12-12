@@ -1,4 +1,5 @@
 import { characterNote } from "../general/types";
+import { saveFileDialog } from "../electron/electronUtils";
 
 type exportScriptProps = {
   title: string;
@@ -7,7 +8,7 @@ type exportScriptProps = {
   characterNotes: characterNote[];
 };
 
-export const exportScript = ({
+export const exportScript = async ({
   title,
   contentRef,
   notes,
@@ -75,12 +76,6 @@ export const exportScript = ({
     Array.from(contentDiv.childNodes).forEach(traverseNode);
   }
 
-  // Trigger a download of the script
-  const blob = new Blob([scriptText], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = title + ".txt";
-  a.click();
-  URL.revokeObjectURL(url);
+  // Use Electron file dialog or browser download
+  await saveFileDialog(scriptText, title + ".txt");
 };

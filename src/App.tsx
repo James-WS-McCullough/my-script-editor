@@ -99,6 +99,16 @@ import { DeleteScriptModal } from "./modals/DeleteScriptModal";
 import { RenameScriptModal } from "./modals/RenameScriptModal";
 import { NameNewScriptModal } from "./modals/NameNewScriptModal";
 import { TagMenu } from "./modals/TagMenu";
+import {
+  getSettings,
+  saveSettings,
+  getRepositoryPath,
+  setRepositoryPath,
+  selectFolder,
+  openRepositoryFolder,
+  isElectron
+} from "./utils/electron/electronUtils";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 
 type AppProps = {
   scriptId?: string;
@@ -108,6 +118,7 @@ type AppProps = {
 function App({ scriptId, isReadOnly }: AppProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [importText, setImportText] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const [title, setTitle] = useState("");
   const [scriptUUID, setScriptUUID] = useState("");
@@ -151,6 +162,7 @@ function App({ scriptId, isReadOnly }: AppProps) {
     targetWordCount: 0,
     maxWordCount: 0,
   });
+  const [repositoryPath, setRepositoryPathState] = useState<string>("");
   const [wordCount, setWordCount] = useState(0);
   const [scriptVersions, setScriptVersions] = useState([]) as [
     {
@@ -314,10 +326,33 @@ function App({ scriptId, isReadOnly }: AppProps) {
   };
 
   useEffect(() => {
-    const settings = localStorage.getItem("editorSettings");
-    if (settings) {
-      setEditorSettings(JSON.parse(settings));
-    }
+    const loadSettings = async () => {
+      const settings = await getSettings();
+      if (settings) {
+        setEditorSettings(settings);
+      }
+      // Load repository path
+      if (isElectron()) {
+        const repoPath = await getRepositoryPath();
+        setRepositoryPathState(repoPath);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // Listen for fullscreen changes (for hiding title bar in fullscreen)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    // Also check on mount
+    setIsFullscreen(!!document.fullscreenElement);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -505,40 +540,60 @@ function App({ scriptId, isReadOnly }: AppProps) {
   };
 
   return (
-    <Stack
-      // Box should fill the entire window and expand to fit the content
+    <Box
       display="flex"
-      alignItems="center"
-      justifyContent="center"
+      flexDirection="column"
+      height="100vh"
       backgroundColor="black"
-      spacing={0}
-      flexDirection={["column-reverse", "row"]}
-      height={["100vh", "100vh"]}
     >
-      {/* Button Area */}
+      {/* Electron title bar - draggable area for window controls (hidden in fullscreen) */}
+      {isElectron() && !isFullscreen && (
+        <Box
+          height="38px"
+          minHeight="38px"
+          backgroundColor={designColors.darkblue}
+          width="100%"
+          sx={{
+            WebkitAppRegion: "drag",
+            userSelect: "none",
+          }}
+        />
+      )}
       <Stack
-        id="button-bar"
-        spacing={2}
-        p="2"
-        backgroundColor={designColors.darkblue}
-        direction={["row", "column"]}
-        width={["100vw", "fit-content"]}
-        height={["fit-content", "100vh"]}
-        alignItems="start"
+        // Box should fill the entire window and expand to fit the content
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        backgroundColor="black"
+        spacing={0}
+        flexDirection={["column-reverse", "row"]}
+        flex="1"
+        height={isElectron() && !isFullscreen ? "calc(100vh - 38px)" : "100vh"}
       >
-        {!isReadOnly && (
-          <IconButton
-            aria-label="Open menu"
-            icon={<MenuIcon />}
-            onClick={() => {
-              handleOpenMenu({
-                onMenuOpen,
-              });
-            }}
-            isDisabled={isGenerating}
-            title="Menu"
-          />
-        )}
+        {/* Button Area */}
+        <Stack
+          id="button-bar"
+          spacing={2}
+          p="2"
+          backgroundColor={designColors.darkblue}
+          direction={["row", "column"]}
+          width={["100vw", "fit-content"]}
+          height={["fit-content", "100%"]}
+          alignItems="start"
+        >
+          {!isReadOnly && (
+            <IconButton
+              aria-label="Open menu"
+              icon={<MenuIcon />}
+              onClick={() => {
+                handleOpenMenu({
+                  onMenuOpen,
+                });
+              }}
+              isDisabled={isGenerating}
+              title="Menu"
+            />
+          )}
         <IconButton
           aria-label="Edit notes"
           icon={<NoteIcon />}
@@ -990,9 +1045,57 @@ function App({ scriptId, isReadOnly }: AppProps) {
                 })
               }
             />
+            {isElectron() && (
+              <VStack alignItems="start" spacing="2" mt="4" width="100%">
+                <Text fontWeight="bold">Scripts Repository</Text>
+                <Text fontSize="sm" color="gray.400">
+                  Where your scripts are saved on disk
+                </Text>
+                <HStack width="100%" spacing="2">
+                  <Input
+                    value={repositoryPath}
+                    isReadOnly
+                    flex="1"
+                    fontSize="sm"
+                  />
+                  <IconButton
+                    aria-label="Open folder"
+                    icon={<FolderOpenIcon />}
+                    onClick={() => openRepositoryFolder(repositoryPath)}
+                    title="Open in file explorer"
+                  />
+                </HStack>
+                <HStack spacing="2">
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      const newPath = await selectFolder();
+                      if (newPath) {
+                        await setRepositoryPath(newPath);
+                        setRepositoryPathState(newPath);
+                      }
+                    }}
+                  >
+                    Change Location
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      await setRepositoryPath(null);
+                      const defaultPath = await getRepositoryPath();
+                      setRepositoryPathState(defaultPath);
+                    }}
+                  >
+                    Reset to Default
+                  </Button>
+                </HStack>
+              </VStack>
+            )}
             <Button
               aria-label="Delete script"
               colorScheme="red"
+              mt="4"
               onClick={() => {
                 const confirmation = window.confirm(
                   "Are you sure you want to delete all scripts?"
@@ -1013,11 +1116,8 @@ function App({ scriptId, isReadOnly }: AppProps) {
             <Button
               colorScheme="blue"
               mr={3}
-              onClick={() => {
-                localStorage.setItem(
-                  "editorSettings",
-                  JSON.stringify(editorSettings)
-                );
+              onClick={async () => {
+                await saveSettings(editorSettings);
                 onSettingsModalClose();
               }}
             >
@@ -1343,6 +1443,7 @@ function App({ scriptId, isReadOnly }: AppProps) {
         setScriptTags={setScriptTags}
       />
     </Stack>
+    </Box>
   );
 }
 
