@@ -84,6 +84,7 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
+            spellcheck: true,
         },
         titleBarStyle: 'hiddenInset',
         trafficLightPosition: { x: 15, y: 15 },
@@ -97,6 +98,27 @@ function createWindow() {
     else {
         mainWindow.loadFile(path.join(__dirname, '../build/index.html'));
     }
+    // Spell check context menu
+    mainWindow.webContents.on('context-menu', (_event, params) => {
+        const menu = new electron_1.Menu();
+        // Add spelling suggestions
+        if (params.misspelledWord) {
+            for (const suggestion of params.dictionarySuggestions) {
+                menu.append(new electron_1.MenuItem({
+                    label: suggestion,
+                    click: () => mainWindow.webContents.replaceMisspelling(suggestion),
+                }));
+            }
+            if (params.dictionarySuggestions.length > 0) {
+                menu.append(new electron_1.MenuItem({ type: 'separator' }));
+            }
+            menu.append(new electron_1.MenuItem({
+                label: 'Add to Dictionary',
+                click: () => mainWindow.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+            }));
+            menu.popup();
+        }
+    });
     mainWindow.on('closed', () => {
         mainWindow = null;
     });

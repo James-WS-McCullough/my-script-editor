@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, clipboard } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, clipboard, Menu, MenuItem } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -70,6 +70,7 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      spellcheck: true,
     },
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 15 },
@@ -83,6 +84,29 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../build/index.html'));
   }
+
+  // Spell check context menu
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const menu = new Menu();
+
+    // Add spelling suggestions
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions) {
+        menu.append(new MenuItem({
+          label: suggestion,
+          click: () => mainWindow!.webContents.replaceMisspelling(suggestion),
+        }));
+      }
+      if (params.dictionarySuggestions.length > 0) {
+        menu.append(new MenuItem({ type: 'separator' }));
+      }
+      menu.append(new MenuItem({
+        label: 'Add to Dictionary',
+        click: () => mainWindow!.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      }));
+      menu.popup();
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
