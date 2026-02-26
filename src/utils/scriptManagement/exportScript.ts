@@ -68,6 +68,10 @@ export const exportScript = async ({
         scriptText += `[b]${element.textContent}[/b]`;
       } else if (element.tagName === "U") {
         scriptText += `[u]${element.textContent}[/u]`;
+      } else {
+        // Fallback: recurse into children for any unrecognized element
+        // (e.g. FONT, STRONG, EM, MARK, A, etc. that contentEditable may create)
+        Array.from(element.childNodes).forEach(traverseNode);
       }
     }
   };

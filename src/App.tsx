@@ -82,6 +82,7 @@ import { NotesModal } from "./modals/NotesModal";
 import { UploadModal } from "./modals/UploadModal";
 import { loadScriptFromSpan } from "./utils/scriptManagement/loadScriptFromSpan";
 import { SelectScript } from "./components/selectScript";
+import { FindReplaceBar } from "./components/FindReplaceBar";
 import { SelectScriptModal } from "./modals/selectScriptModal";
 import { addLinkSpan } from "./utils/general/createLinkFromSelection";
 import { MenuModal } from "./modals/MenuModal";
@@ -137,6 +138,8 @@ function App({ scriptId, isReadOnly }: AppProps) {
   const [scriptLinkHistory, setScriptLinkHistory] = useState<string[]>([]);
   const [isLoadingScript, setIsLoadingScript] = useState(false);
   const [scriptShareLink, setScriptShareLink] = useState("");
+  const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false);
+  const [showReplace, setShowReplace] = useState(false);
   const [scriptTags, setScriptTags] = useState<string[]>([]);
   const [currentInfoNoteText, setCurrentInfoNoteText] = useState<string | null>(
     null
@@ -330,6 +333,9 @@ function App({ scriptId, isReadOnly }: AppProps) {
       const settings = await getSettings();
       if (settings) {
         setEditorSettings(settings);
+        if (settings.scriptSpacing) {
+          setScriptSpacing(settings.scriptSpacing);
+        }
       }
       // Load repository path
       if (isElectron()) {
@@ -338,6 +344,23 @@ function App({ scriptId, isReadOnly }: AppProps) {
       }
     };
     loadSettings();
+  }, []);
+
+  // Listen for Cmd+F / Ctrl+F (Find) and Cmd+H / Ctrl+H (Replace)
+  useEffect(() => {
+    const handleFindReplace = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setIsFindReplaceOpen(true);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "h") {
+        e.preventDefault();
+        setIsFindReplaceOpen(true);
+        setShowReplace(true);
+      }
+    };
+    window.addEventListener("keydown", handleFindReplace);
+    return () => window.removeEventListener("keydown", handleFindReplace);
   }, []);
 
   // Listen for fullscreen changes (for hiding title bar in fullscreen)
@@ -631,20 +654,18 @@ function App({ scriptId, isReadOnly }: AppProps) {
               <CompressIcon />
             )
           }
-          onClick={() => {
-            if (scriptSpacing === scriptSpacingTypes.SPACED) {
-              setScriptSpacing(scriptSpacingTypes.COMPACT);
-              updateCharacterNameStyling({
-                contentRef,
-                scriptSpacing: scriptSpacingTypes.COMPACT,
-              });
-            } else {
-              setScriptSpacing(scriptSpacingTypes.SPACED);
-              updateCharacterNameStyling({
-                contentRef,
-                scriptSpacing: scriptSpacingTypes.SPACED,
-              });
-            }
+          onClick={async () => {
+            const newSpacing =
+              scriptSpacing === scriptSpacingTypes.SPACED
+                ? scriptSpacingTypes.COMPACT
+                : scriptSpacingTypes.SPACED;
+            setScriptSpacing(newSpacing);
+            updateCharacterNameStyling({
+              contentRef,
+              scriptSpacing: newSpacing,
+            });
+            const settings = await getSettings();
+            await saveSettings({ ...settings, scriptSpacing: newSpacing });
           }}
           colorScheme="blue"
           isDisabled={isGenerating}
@@ -771,7 +792,15 @@ function App({ scriptId, isReadOnly }: AppProps) {
             height={`calc(100% - ${
               (document.getElementById("title-bar")?.clientHeight || 0) + 8
             }px)`}
+            position="relative"
           >
+            <FindReplaceBar
+              contentRef={contentRef}
+              isOpen={isFindReplaceOpen}
+              onClose={() => setIsFindReplaceOpen(false)}
+              showReplace={showReplace}
+              setShowReplace={setShowReplace}
+            />
             <div
               contentEditable={!isGenerating && !!title && !isReadOnly}
               placeholder="Type your script here..."
